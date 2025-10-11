@@ -101,9 +101,33 @@ void setup() {
 void loop() {
   dnsServer.processNextRequest();
   webServer.handleClient();
-  temperature++;
-  run();
+  getTemperature();
+  if (startStop == true) {
+    acPowerCalculate(pidLoop());
+  } else {
+    acPowerCalculate(0);
+  } 
 }
+
+
+// Get temperature from probe (not yet implemented)
+void getTemperature() {
+  temperature = 10;
+}
+
+
+// PID loop return value from 0-100 to represent power
+int pidLoop() {
+  return 50;
+}
+
+
+// Calculate ac period on and off then write to SSR
+void acPowerCalculate(int percentage) {
+  Serial.println("doing something");
+}
+
+
 
 
 // Fetches the HTML script from memory
@@ -121,16 +145,6 @@ String openReflowCode() {
 
   htmlFile.close();
   return fileContents;
-}
-
-
-// Function for handling temperature control
-void run(){
-  if (startStop == true) {
-
-    //Placeholder actual function to do reflow will be required
-    //Serial.println("running");
-  }
 }
 
 

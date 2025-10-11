@@ -30,12 +30,11 @@
         <input type="text" id="profileName" name="profileName" placeholder="Enter profile Name">
         <button type="saveProfile" onclick="saveProfile()" style="margin-right: 20px;">Save Profile</button>
         <br><br>
-        <select id="loadProfile" onClick="loadProfile()"  onchange="readProfile()">
+        <select id="loadProfile" onchange="readProfile()" style="margin-right: 40px;">
             <option value="">Load Profile</option>
-            <option value="Profile 1">Profile 1</option>
-            <option value="profile2">Profile 2</option>
-            <option value="profile3">Profile 3</option>
         </select>
+        <label for="currentTemp">Current Temperature (&deg;C):</label>
+        <input type="text" id="currentTemp" name="currentTemp" readonly>
         <br>
 
         <h2> Temperature (&deg;C) vs Time (s) Plot </h2>
@@ -45,16 +44,27 @@
         <button type="stopReflow" onclick="stopReflow()">Stop Reflow</button>
         <br><br>
         <p id="output"></p>
+
         
 
         <script>
             // Get canvas context and set up coordinate system
             const canvas = document.getElementById('tempGraph');
             const ctx = canvas.getContext('2d');
-            let xMax = canvas.width;
-            let yMax = canvas.height;
             ctx.transform(1, 0, 0, -1, 0, canvas.height); // Invert y-axis
             loadProfiles();
+
+            // Graphing global variables
+            let xLargest = 0;
+            let yLargest = 0;
+            let xMax = canvas.width;
+            let yMax = canvas.height;
+            let timeCounter = 0;
+            let start = false;
+
+            window.onload = function() {
+                setInterval(getTemp, 1000);
+            };
 
 
             // Function to delete a row in the table
@@ -176,7 +186,7 @@
                     },
                     body: "START"
                 })
-                alert("Stop start done")
+                start = true;
             }
 
             // Function to stop the reflow process (not implemented)
@@ -188,6 +198,7 @@
                     },
                     body: "STOP"
                 })
+                start = false;
             }
 
             // Function to save the profile to a file
@@ -213,7 +224,7 @@
                         //return;
                     } else {
                         alert("Profile " + profileName + " saved! ");
-
+                        document.getElementById("profileName").value = "";
                     }  
                 }
                 loadProfiles();
@@ -229,8 +240,23 @@
                     body: "Hi"
                 })
                 let jsonOutput = JSON.parse(await output.text());
+
+                // Populate list with profiles
+                let select = document.getElementById('loadProfile');
+                while (select.options.length > 0) {
+                    select.remove(0);
+                }
+                let defaultOption = document.createElement("option");
+                defaultOption.text = "Load Profile";
+                defaultOption.value = "";
+                select.appendChild(defaultOption);
+
                 for(let i =0; i < jsonOutput.length; i++) {
-                    document.getElementById('loadProfile').append(jsonOutput[i]);
+                    let option = document.createElement("option");
+                    let newProfile = jsonOutput[i].slice(0, -5);
+                    option.text = newProfile;
+                    option.value = newProfile;
+                    select.appendChild(option);
                 }
             }
 
@@ -252,6 +278,9 @@
                     
                     // Write data to table
                     const table = document.getElementById('graphValues').getElementsByTagName('tbody')[0];
+                    while (table.rows.length > 0) {
+                        table.deleteRow(0);
+                    }
                     for (k = 0; k < profileData["x"].length; k++) {
                         const row = table.insertRow();
                         for (let i = 0; i < 2; i++) {
@@ -269,7 +298,30 @@
             }
 
 
-            // Left to do: get table to delete before reloading data, get list to update with data from memory, temperature plot, PID
+            // Function to get temperature from esp8266
+            async function getTemp() {
+                let temp = await fetch("/temperature", {
+                    method: "POST",
+                    headers: {
+                        contentType: "text/plain"
+                    },
+                    body: "Hi"
+                })
+                let temperature = await temp.text();
+                document.getElementById("currentTemp").value = temperature;
+                if (start == true) {
+                    ctx.fillStyle = 'red';
+                    ctx.beginPath();
+                    ctx.ellipse(((10/xLargest)*xMax), ((10/yLargest)*yMax), 3, 3, 0, 0, Math.PI * 2);
+                    ctx.fill;
+                    ctx.closePath();
+                    timeCounter += 1;
+                } else {
+                    timeCounter = 0;
+                }
+            }
+
+            // Left to do: fix temperature plot, PID
             
         </script>
 
