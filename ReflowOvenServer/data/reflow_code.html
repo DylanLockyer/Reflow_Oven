@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+    <body>
+        <h1>Reflow Oven Control Center </h1>
+
+        <table id="graphValues" border="1">
+            <thead>
+                <tr>
+                    <th>Temperature (&deg;C)</th>
+                    <th>Time (s)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td contenteditable="true">20</td>
+                    <td contenteditable="true">0</td>
+                    <td>
+                        <button onclick = "deleteRow(this)">delete</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        
+
+
+        <button type="addRow" onclick="addRow()" style="margin-right: 20px;">Add Row</button>
+        <button type="updateGraph" onclick="updateGraph()">Update Graph</button>
+        <br><br>
+        <input type="text" id="profileName" name="profileName" placeholder="Enter profile Name">
+        <button type="saveProfile" onclick="saveProfile()" style="margin-right: 20px;">Save Profile</button>
+        <br><br>
+        <select id="loadProfile" onClick="loadProfile()"  onchange="readProfile()">
+            <option value="">Load Profile</option>
+            <option value="Profile 1">Profile 1</option>
+            <option value="profile2">Profile 2</option>
+            <option value="profile3">Profile 3</option>
+        </select>
+        <br>
+
+        <h2> Temperature (&deg;C) vs Time (s) Plot </h2>
+        <canvas id="tempGraph" width="600" height="400" style="border:1px solid black"></canvas>
+        <br><br>
+        <button type="startReflow" onclick="startReflow()" style="margin-right: 40px;">Start Reflow</button>
+        <button type="stopReflow" onclick="stopReflow()">Stop Reflow</button>
+        <br><br>
+        <p id="output"></p>
+        
+
+        <script>
+            // Get canvas context and set up coordinate system
+            const canvas = document.getElementById('tempGraph');
+            const ctx = canvas.getContext('2d');
+            let xMax = canvas.width;
+            let yMax = canvas.height;
+            ctx.transform(1, 0, 0, -1, 0, canvas.height); // Invert y-axis
+            loadProfiles();
+
+
+            // Function to delete a row in the table
+            function deleteRow(btn) {
+                const row = btn.parentNode.parentNode;
+                row.parentNode.removeChild(row);
+            }
+
+            // Function to add a new row to the table
+            function addRow() {
+                const table = document.getElementById('graphValues').getElementsByTagName('tbody')[0];
+                const row = table.insertRow();
+                for (let i = 0; i < 2; i++) {
+                    let cell = row.insertCell();
+                    cell.contentEditable = "true";
+                    cell.innerText = "";
+                }
+                let actionCell = row.insertCell();
+                actionCell.innerHTML = '<button onclick="deleteRow(this)">Delete</button>';
+            }
+
+            // Function to get table data as arrays
+            function getTableData() {
+                const rows = document.getElementById('graphValues').getElementsByTagName('tbody')[0].getElementsByTagName('tr')
+                let x = new Array(rows.length);
+                let y = new Array(rows.length);
+
+                for (let i = 0; i < rows.length; i++) {
+                    const cells = rows[i].getElementsByTagName('td');
+                    let x_temp = parseInt(cells[1].innerText, 10);
+                    let y_temp = parseInt(cells[0].innerText, 10);
+                    
+                    if (!isNaN(x_temp) && !isNaN(y_temp)) {
+                        x[i] = x_temp;
+                        y[i] = y_temp;
+                    } else {
+                        x[i] = 0;
+                        y[i] = 0;
+                    }
+                }
+                return [x, y];
+            }
+
+        
+            // Function to update the graph based on table data
+            function updateGraph() {
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
+
+
+                let x, y;
+                [x, y] = getTableData();
+
+                // Find largest x and y values for scaling
+                let xLargest = x[0];
+                let yLargest = y[0];
+
+                for (let i = 0; i < x.length; i++) {
+                    if (x[i] > xLargest){
+                        xLargest = x[i];
+                    }
+                    if (y[i] > yLargest){
+                        yLargest = y[i];
+                    }
+                }
+
+                // Scale largest values to fit in canvas with 10% margin, add one to avoid zero division
+                xLargest = (xLargest+1)*1.1;
+                yLargest = (yLargest+1)*1.1;
+
+
+                // Scale x and y values to fit in canvas
+                let xScaled = new Array(x.length);
+                let yScaled = new Array(y.length);
+                for (let i = 0; i < x.length; i++) {
+                    xScaled[i] = (x[i]/xLargest)*xMax;
+                    yScaled[i] = (y[i]/yLargest)*yMax;
+                }
+
+
+                // Draw points and lines
+                ctx.strokeStyle = 'blue';
+                ctx.fillStyle = 'blue';
+                ctx.lineWidth = 2;
+
+                for (let i = 0; i < xScaled.length; i++) {
+                    ctx.beginPath();
+                    ctx.ellipse(xScaled[i], yScaled[i], 3, 3, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.closePath();
+                }
+
+                for (let i = 1; i < xScaled.length; i++) {
+                    // Draw lines
+                    ctx.beginPath();
+                    ctx.moveTo(xScaled[i - 1], yScaled[i - 1]);
+                    ctx.lineTo(xScaled[i], yScaled[i]);
+                    ctx.stroke();
+                    ctx.closePath();
+                }
+            }
+
+            // Function to start the reflow process (not implemented)
+            async function startReflow() {
+                await fetch("/updateProfile", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        x: getTableData()[0],
+                        y: getTableData()[1]
+                    })
+                })
+                await fetch("/stopStart", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "text/plain"
+                    },
+                    body: "START"
+                })
+                alert("Stop start done")
+            }
+
+            // Function to stop the reflow process (not implemented)
+            async function stopReflow() {
+                await fetch("/stopStart", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "text/plain"
+                    },
+                    body: "STOP"
+                })
+            }
+
+            // Function to save the profile to a file
+            async function saveProfile() {
+                let profileName = document.getElementById("profileName").value;
+                if (profileName === ""){
+                    alert("Please enter a profile name before saving.");
+                    //return;
+                } else {
+                    let response = await fetch("/saveProfile", {
+                        method: "POST",
+                        headers: {
+                        "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            name: profileName,
+                            x: getTableData()[0],
+                            y: getTableData()[1]
+                        })  
+                    })
+                    if (await response.text() !== "OK"){
+                        alert("Error saving profile: " + await response.text());
+                        //return;
+                    } else {
+                        alert("Profile " + profileName + " saved! ");
+
+                    }  
+                }
+                loadProfiles();
+            }
+            
+            // Function to get list of all reflow profiles (not implemented)
+            async function loadProfiles() {
+                let output = await fetch("/getProfiles", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "text/plain"
+                    },
+                    body: "Hi"
+                })
+                let jsonOutput = JSON.parse(await output.text());
+                for(let i =0; i < jsonOutput.length; i++) {
+                    document.getElementById('loadProfile').append(jsonOutput[i]);
+                }
+            }
+
+            // 
+            async function readProfile() {
+                let profileName = document.getElementById("loadProfile").value;
+                if (profileName === ""){
+                    alert("Please select a profile to load.");
+                    return;
+                } else {
+                    let output = await fetch("/readProfile", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "text/plain"
+                        },
+                        body: profileName
+                    })
+                    let profileData = JSON.parse(await output.text());
+                    
+                    // Write data to table
+                    const table = document.getElementById('graphValues').getElementsByTagName('tbody')[0];
+                    for (k = 0; k < profileData["x"].length; k++) {
+                        const row = table.insertRow();
+                        for (let i = 0; i < 2; i++) {
+                            let cell = row.insertCell();
+                            cell.contentEditable = "true";
+                            if (i === 0) {cell.innerText = profileData["y"][k];}
+                            else if (i === 1) {cell.innerText = profileData["x"][k];}
+                        }
+                        let actionCell = row.insertCell();
+                        actionCell.innerHTML = '<button onclick="deleteRow(this)">Delete</button>';
+                    }
+                    
+                }
+                updateGraph();
+            }
+
+
+            // Left to do: get table to delete before reloading data, get list to update with data from memory, temperature plot, PID
+            
+        </script>
+
+    </body>
+</html>
