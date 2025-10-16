@@ -63,7 +63,7 @@
             let start = false;
 
             window.onload = function() {
-                setInterval(getTemp, 1000);
+                setInterval(getTemp, 500);
             };
 
 
@@ -119,8 +119,8 @@
                 [x, y] = getTableData();
 
                 // Find largest x and y values for scaling
-                let xLargest = x[0];
-                let yLargest = y[0];
+                xLargest = x[0];
+                yLargest = y[0];
 
                 for (let i = 0; i < x.length; i++) {
                     if (x[i] > xLargest){
@@ -167,7 +167,7 @@
                 }
             }
 
-            // Function to start the reflow process (not implemented)
+            // Function to start the reflow process
             async function startReflow() {
                 await fetch("/updateProfile", {
                     method: "POST",
@@ -187,9 +187,10 @@
                     body: "START"
                 })
                 start = true;
+                updateGraph();
             }
 
-            // Function to stop the reflow process (not implemented)
+            // Function to stop the reflow process
             async function stopReflow() {
                 await fetch("/stopStart", {
                     method: "POST",
@@ -230,7 +231,7 @@
                 loadProfiles();
             }
             
-            // Function to get list of all reflow profiles (not implemented)
+            // Function to get list of all reflow profiles
             async function loadProfiles() {
                 let output = await fetch("/getProfiles", {
                     method: "POST",
@@ -260,7 +261,7 @@
                 }
             }
 
-            // 
+            // Pulls a saved reflow profile from memory
             async function readProfile() {
                 let profileName = document.getElementById("loadProfile").value;
                 if (profileName === ""){
@@ -308,20 +309,26 @@
                     body: "Hi"
                 })
                 let temperature = await temp.text();
+                
                 document.getElementById("currentTemp").value = temperature;
-                if (start == true) {
-                    ctx.fillStyle = 'red';
+                if (start) {
                     ctx.beginPath();
-                    ctx.ellipse(((10/xLargest)*xMax), ((10/yLargest)*yMax), 3, 3, 0, 0, Math.PI * 2);
-                    ctx.fill;
+
+                    ctx.fillStyle = 'red';
+                    ctx.ellipse(((timeCounter/xLargest)*xMax), ((temperature/yLargest)*yMax), 3, 3, 0, 0, Math.PI * 2);
+                    ctx.fill();
                     ctx.closePath();
-                    timeCounter += 1;
+
+
+                    if (timeCounter >= ((xLargest/1.1) - 1)) { stopReflow(); }
+
+                    timeCounter += 0.5;
                 } else {
                     timeCounter = 0;
                 }
             }
 
-            // Left to do: fix temperature plot, PID
+            
             
         </script>
 

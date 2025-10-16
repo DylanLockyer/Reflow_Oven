@@ -55,7 +55,6 @@ void setup() {
     } else if (arg == "START") {
       startStop = true;
     }
-    Serial.println(startStop);
     webServer.send(200, "text/plain", "OK");
   });
 
@@ -71,7 +70,6 @@ void setup() {
   webServer.on("/saveProfile", HTTP_POST, []() {
     JSONVar saveProfile = JSON.parse(webServer.arg("plain"));
     String verification = writeProfile(saveProfile["name"], saveProfile);
-    Serial.println("saveProfile Verification " + verification);
     webServer.send(200, "application/json", "OK");
   });
 
@@ -80,7 +78,6 @@ void setup() {
   webServer.on("/getProfiles", HTTP_POST, []() {
     String profileNames = readProfileNames();
     webServer.send(200, "text/plain", profileNames);
-    Serial.println(profileNames);
   });
 
 
@@ -89,7 +86,6 @@ void setup() {
     String profile = webServer.arg("plain");
     String profileContents = readProfileContent(profile);
     webServer.send(200, "text/plain", profileContents);
-    Serial.println(profileContents);
   });
 
   // Create the webserver
@@ -118,13 +114,24 @@ void getTemperature() {
 
 // PID loop return value from 0-100 to represent power
 int pidLoop() {
+  // x is time, y is temperature
+  int i = 1;
+  //int[] temps = profile['y'];
+  //int[] times = profle['x'];
+  // Serial.println(JSON.stringify(profile[0][0]));
+  // while(1){
+  //   if (time <)
+
+
+  // }
+
   return 50;
 }
 
 
 // Calculate ac period on and off then write to SSR
 void acPowerCalculate(int percentage) {
-  Serial.println("doing something");
+
 }
 
 
@@ -133,12 +140,10 @@ void acPowerCalculate(int percentage) {
 // Fetches the HTML script from memory
 String openReflowCode() {
   if (!LittleFS.begin()){
-    Serial.println("LittleFs cannot start");
     return "null";
   }
   File htmlFile = LittleFS.open("/reflow_code.html", "r");
   if(!htmlFile){  
-    Serial.println("File doesn't exist");
     return "null";
   }
   String fileContents = htmlFile.readString();    
@@ -157,17 +162,14 @@ String readProfileNames() {
     profileNames[i] = profile.fileName();
     i++;
   }
-  Serial.println("got list of names");
   return JSON.stringify(profileNames);
 }
 
 
 // Read the reflow x/y values from text
 String readProfileContent(String name) {
-  Serial.println("starting to read profile " + name);
   File profileFile = LittleFS.open("/profile/" + name + ".json", "r");
   if (!profileFile.isFile()){
-    Serial.println("profile doesn't exist");
     return "none";
   } else {
     String readProfile = profileFile.readString();
@@ -189,6 +191,5 @@ String writeProfile(String name, JSONVar content) {
   newFile.println(content);
   delay(100);
   newFile.close();
-  Serial.println("saved profile");
   return "OK";
 }
