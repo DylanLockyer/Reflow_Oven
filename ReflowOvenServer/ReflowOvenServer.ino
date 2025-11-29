@@ -3,10 +3,25 @@
 #include <ESP8266WebServer.h>
 #include <Arduino_JSON.h>
 #include "LittleFS.h"
+#include <SPI.h>
+#include "Adafruit_MAX31855.h"
+
+
+// Thermocouple pins
+#define MAXDO   12
+#define MAXCS   4
+#define MAXCLK  14
+
+#define SSR 5
+
+
+// initialize the Thermocouple
+Adafruit_MAX31855 thermocouple(MAXCLK, MAXCS, MAXDO);
 
 
 const String SSID = "Reflow Oven";
 const byte DNS_PORT = 53;
+
 
 
 IPAddress apIP(172, 217, 28, 1);
@@ -14,21 +29,26 @@ DNSServer dnsServer;
 ESP8266WebServer webServer(80);
 
 String responseHTML = "";
-int temperature = 0;
+double temperature = 0;
 bool startStop = false;
 JSONVar profile;
+float loopIterator = 0;
 
 void setup() {
 
   // Serial initialisation
   Serial.begin(74880);
 
+  //Builtin led flash
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(SSR, OUTPUT);
+
 
   // Initialize wifi
   responseHTML = openReflowCode();
   WiFi.mode(WIFI_AP);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-  WiFi.softAP(SSID);https://randomnerdtutorials.com/
+  WiFi.softAP(SSID);  https://randomnerdtutorials.com/
 
   // if DNSServer is started with "*" for domain name, it will reply with
   // provided IP to all DNS request
@@ -98,7 +118,24 @@ void loop() {
   dnsServer.processNextRequest();
   webServer.handleClient();
   getTemperature();
+
+    if (loopIterator > 50000){
+      if(digitalRead(LED_BUILTIN) == 0 && temperature > 50){
+        digitalWrite(LED_BUILTIN, HIGH);
+        digitalWrite(SSR, LOW);
+      } else{
+        digitalWrite(LED_BUILTIN, LOW);
+        digitalWrite(SSR, HIGH);
+      }
+      
+      loopIterator = 0;
+    }else{
+      loopIterator++;
+    }
+
+
   if (startStop == true) {
+
     acPowerCalculate(pidLoop());
   } else {
     acPowerCalculate(0);
@@ -108,7 +145,8 @@ void loop() {
 
 // Get temperature from probe (not yet implemented)
 void getTemperature() {
-  temperature = 10;
+  temperature = thermocouple.readCelsius();
+  Serial.println(temperature);
 }
 
 
