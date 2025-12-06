@@ -31,20 +31,21 @@ ESP8266WebServer webServer(80);
 String responseHTML = "";
 double temperature = 0;
 bool startStop = false;
+bool isOn = false;
 JSONVar profile;
-float loopIterator = 0;
+
+long halfTime = 0;
+long startTime = 0;
 
 void setup() {
 
   // Serial initialisation
   Serial.begin(74880);
 
-  //Builtin led flash
-  pinMode(LED_BUILTIN, OUTPUT);
+  //SSR initialization
   pinMode(SSR, OUTPUT);
 
-
-  // Initialize wifi
+  //Initialize wifi
   responseHTML = openReflowCode();
   WiFi.mode(WIFI_AP);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
@@ -74,6 +75,7 @@ void setup() {
       startStop = false;
     } else if (arg == "START") {
       startStop = true;
+      startTime = millis();
     }
     webServer.send(200, "text/plain", "OK");
   });
@@ -103,8 +105,8 @@ void setup() {
 
   // Interupt for sending the content of a specific profile
   webServer.on("/readProfile", HTTP_POST, []() {
-    String profile = webServer.arg("plain");
-    String profileContents = readProfileContent(profile);
+    String profileSend = webServer.arg("plain");
+    String profileContents = readProfileContent(profileSend);
     webServer.send(200, "text/plain", profileContents);
   });
 
@@ -119,25 +121,10 @@ void loop() {
   webServer.handleClient();
   getTemperature();
 
-    if (loopIterator > 50000){
-      if(digitalRead(LED_BUILTIN) == 0 && temperature > 50){
-        digitalWrite(LED_BUILTIN, HIGH);
-        digitalWrite(SSR, LOW);
-      } else{
-        digitalWrite(LED_BUILTIN, LOW);
-        digitalWrite(SSR, HIGH);
-      }
-      
-      loopIterator = 0;
-    }else{
-      loopIterator++;
-    }
-
-
   if (startStop == true) {
-
-    acPowerCalculate(pidLoop());
-  } else {
+  acPowerCalculate(pidLoop());
+  } 
+  else {
     acPowerCalculate(0);
   } 
 }
@@ -146,33 +133,49 @@ void loop() {
 // Get temperature from probe (not yet implemented)
 void getTemperature() {
   temperature = thermocouple.readCelsius();
-  Serial.println(temperature);
 }
 
 
 // PID loop return value from 0-100 to represent power
 int pidLoop() {
-  // x is time, y is temperature
-  int i = 1;
-  //int[] temps = profile['y'];
-  //int[] times = profle['x'];
-  // Serial.println(JSON.stringify(profile[0][0]));
-  // while(1){
-  //   if (time <)
+  int currentTime = millis() - startTime;
+  int requiredTemp = 0;
+  for(int i = 0; i < profile["x"].length(); i++){
+    Serial.println(currentTime <= (int)profile["x"][i]);
+    if (currentTime <= (int)profile["x"][i]) { 
+      int lowTime = profile["x"][i - 1];
+      int highTime = profile["x"][i];
+      int lowTemp = profile["y"][i - 1];
+      int highTemp = profile["y"][i];
 
+      int tempSlope = (highTemp - lowTemp) / (highTime - lowTime);
+      requiredTemp = lowTemp + tempSlope * (currentTime - lowTime);
+      break;
+    }
+  }
+  // Serial.println(requiredTemp);
 
-  // }
-
-  return 50;
+  return 100;
 }
 
 
 // Calculate ac period on and off then write to SSR
-void acPowerCalculate(int percentage) {
+void acPowerCalculate(float power) {
+  if (power < 0) {power = 0;}
+  if (power > 100) {power = 100;}
 
+  float onTimeTemp = map(power, 0, 100, 0, 30);
+  int onTime = round(onTimeTemp / 2) * 2;
+
+  if (millis() >= ((halfTime + 500))) { halfTime += 500; }
+
+  if ((millis() - halfTime) < (((float)onTime / 60) * 1000)) {
+    digitalWrite(SSR, HIGH);
+  }
+  else {
+    digitalWrite(SSR, LOW);
+  }
 }
-
-
 
 
 // Fetches the HTML script from memory
@@ -193,11 +196,11 @@ String openReflowCode() {
 
 // Get a list of all available profiles
 String readProfileNames() {
-  Dir profile = LittleFS.openDir("profile");
+  Dir profiles = LittleFS.openDir("profile");
   JSONVar profileNames;
   int i = 0;
-  while(profile.next()) {
-    profileNames[i] = profile.fileName();
+  while(profiles.next()) {
+    profileNames[i] = profiles.fileName();
     i++;
   }
   return JSON.stringify(profileNames);
