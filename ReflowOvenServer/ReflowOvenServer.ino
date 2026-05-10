@@ -41,6 +41,18 @@ void setup() {
 
   // Serial initialisation
   Serial.begin(74880);
+  Serial.println("hello");
+  // Remove
+  if (!LittleFS.begin()) {
+  Serial.println("LittleFS mount FAILED");
+  } else {
+    Serial.println("LittleFS mounted OK");
+    Dir root = LittleFS.openDir("/");
+    while (root.next()) {
+      Serial.println(root.fileName());
+    }
+  }
+  // remove end
 
   //SSR initialization
   pinMode(SSR, OUTPUT);
