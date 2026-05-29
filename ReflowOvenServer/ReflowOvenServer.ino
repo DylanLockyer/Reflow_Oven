@@ -6,6 +6,15 @@
 #include <SPI.h>
 #include "Adafruit_MAX31855.h"
 
+// PID values
+#define KP 1
+#define KI 0.05
+#define KD 1
+
+#define I_MAX 100
+
+double last_error, i_term;
+
 
 // Thermocouple pins
 #define MAXDO   12
@@ -13,6 +22,9 @@
 #define MAXCLK  14
 
 #define SSR 5
+
+#define pidFrequency 20
+int tempIncrement = 0;
 
 
 // initialize the Thermocouple
@@ -35,7 +47,7 @@ bool isOn = false;
 JSONVar profile;
 
 long halfTime = 0;
-long startTime = 0;
+long prevTime = 0;
 
 void setup() {
 
@@ -87,7 +99,7 @@ void setup() {
       startStop = false;
     } else if (arg == "START") {
       startStop = true;
-      startTime = millis();
+      prevTime = millis();
     }
     webServer.send(200, "text/plain", "OK");
   });
@@ -103,10 +115,16 @@ void setup() {
   // Interupt for saving new reflow profile
   webServer.on("/saveProfile", HTTP_POST, []() {
     JSONVar saveProfile = JSON.parse(webServer.arg("plain"));
-    String verification = writeProfile(saveProfile["name"], saveProfile);
+    writeProfile(saveProfile["name"], saveProfile);
     webServer.send(200, "application/json", "OK");
   });
 
+  // Removes solder reflow profile
+  webServer.on("/removeProfile", HTTP_POST, []() {
+    JSONVar profile = JSON.parse(webServer.arg("plain"));
+    removeProfile(profile["name"]);
+    webServer.send(200, "text/plain", "OK");
+  });
 
   // Interupt for returning list of all available profiles
   webServer.on("/getProfiles", HTTP_POST, []() {
@@ -138,6 +156,7 @@ void loop() {
   } 
   else {
     acPowerCalculate(0);
+    tempIncrement = 0;
   } 
 }
 
@@ -147,34 +166,61 @@ void getTemperature() {
   temperature = thermocouple.readCelsius();
 }
 
+double targetTemp(){
+  double targetTmpIncrement;
+  if (tempIncrement = 0){
+    profile["y"][0] = temperature;
+  }
+  else{
+    double tempDiff = (int)profile["y"][tempIncrement+1] - (int)profile["y"][tempIncrement];
+    double timeDiff = (int)profile["x"][tempIncrement+1] - (int)profile["x"][tempIncrement];
+    targetTmpIncrement = tempDiff / timeDiff;
+  }
+  return targetTmpIncrement;
+}
+
+// PID calculation code
+int calculate_pid(double setpoint, double current){
+
+  // error
+  double error = setpoint - current;
+
+  // PID terms
+  double p_term = KP * error;
+  i_term += KI * error;
+  if (i_term >= I_MAX) i_term = I_MAX;
+  if (i_term <= -I_MAX) i_term = -I_MAX;
+  double d_term = KD * (setpoint - last_error);
+  last_error = error;
+
+  return p_term + i_term + d_term;
+}
 
 // PID loop return value from 0-100 to represent power
 int pidLoop() {
-  int currentTime = millis() - startTime;
-  int requiredTemp = 0;
-  for(int i = 0; i < profile["x"].length(); i++){
-    Serial.println(currentTime <= (int)profile["x"][i]);
-    if (currentTime <= (int)profile["x"][i]) { 
-      int lowTime = profile["x"][i - 1];
-      int highTime = profile["x"][i];
-      int lowTemp = profile["y"][i - 1];
-      int highTemp = profile["y"][i];
-
-      int tempSlope = (highTemp - lowTemp) / (highTime - lowTime);
-      requiredTemp = lowTemp + tempSlope * (currentTime - lowTime);
-      break;
-    }
+  int power;
+  double setpoint;
+  if (temperature >= (int)profile["y"][tempIncrement]){
+    setpoint = profile["y"][tempIncrement];
+    tempIncrement++;
   }
-  // Serial.println(requiredTemp);
+  double targetTmpIncrement = targetTemp();
+  
+  if (millis() == (prevTime + pidFrequency)){
+    prevTime += pidFrequency;
+    setpoint += targetTmpIncrement / pidFrequency;
 
-  return 100;
+    // PID code
+    power = calculate_pid(setpoint, temperature);
+  }
+  return power;
 }
 
 
 // Calculate ac period on and off then write to SSR
 void acPowerCalculate(float power) {
-  if (power < 0) {power = 0;}
-  if (power > 100) {power = 100;}
+  if (power < 0) power = 0;
+  if (power > 100) power = 100;
 
   float onTimeTemp = map(power, 0, 100, 0, 30);
   int onTime = round(onTimeTemp / 2) * 2;
@@ -234,7 +280,7 @@ String readProfileContent(String name) {
 
 
 // Save a new solder reflow profile
-String writeProfile(String name, JSONVar content) {
+void writeProfile(String name, JSONVar content) {
 
   if (!LittleFS.openDir("profile").isDirectory()) {
     LittleFS.mkdir("profile");
@@ -244,5 +290,9 @@ String writeProfile(String name, JSONVar content) {
   newFile.println(content);
   delay(100);
   newFile.close();
-  return "OK";
+}
+
+// Not yet implemented in HTML
+void removeProfile(String name){
+  LittleFS.remove("/profile/" + name + ".json");
 }

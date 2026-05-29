@@ -1,336 +1,678 @@
 <!DOCTYPE html>
-<html>
-    <body>
-        <h1>Reflow Oven Control Center </h1>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reflow Oven Control Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        <table id="graphValues" border="1">
-            <thead>
-                <tr>
-                    <th>Temperature (&deg;C)</th>
-                    <th>Time (s)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td contenteditable="true">20</td>
-                    <td contenteditable="true">0</td>
-                    <td>
-                        <button onclick = "deleteRow(this)">delete</button>
-                    </td>
-                </tr>
-            </tbody>
+  :root {
+    --bg: #0e0f11;
+    --surface: #16181c;
+    --surface2: #1e2127;
+    --border: #2a2d35;
+    --border-bright: #3a3f4a;
+    --accent: #e8612a;
+    --accent-dim: #b84e20;
+    --accent-glow: rgba(232, 97, 42, 0.15);
+    --teal: #1fc8a0;
+    --teal-dim: rgba(31, 200, 160, 0.12);
+    --text: #d4d8e0;
+    --text-muted: #6b7180;
+    --text-bright: #eef0f4;
+    --danger: #e84242;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Barlow', sans-serif;
+    --radius: 4px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* --- Header --- */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .header-icon {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .header-icon svg { width: 20px; height: 20px; fill: white; }
+  header h1 {
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-bright);
+  }
+  header p { font-size: 12px; color: var(--text-muted); font-family: var(--mono); }
+  .header-status {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 12px; color: var(--text-muted);
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 6px var(--teal);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* --- Layout --- */
+  .main {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 69px);
+  }
+
+  /* --- Sidebar --- */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .panel {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-header svg { width: 14px; height: 14px; stroke: var(--text-muted); fill: none; stroke-width: 2; }
+  .panel-body { padding: 14px; }
+
+  /* --- Temp Display --- */
+  .temp-display {
+    display: flex; align-items: baseline; gap: 6px;
+    padding: 16px 14px;
+  }
+  .temp-value {
+    font-family: var(--mono);
+    font-size: 48px;
+    color: var(--accent);
+    line-height: 1;
+    letter-spacing: -2px;
+  }
+  .temp-unit { font-family: var(--mono); font-size: 20px; color: var(--accent-dim); }
+  .temp-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; padding: 0 14px 12px; }
+
+  /* --- Table --- */
+  .table-wrap { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  thead th {
+    padding: 8px 12px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--sans);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody td {
+    padding: 6px 12px;
+    color: var(--text-bright);
+  }
+  tbody td[contenteditable="true"] {
+    outline: none;
+    cursor: text;
+  }
+  tbody td[contenteditable="true"]:focus {
+    background: var(--accent-glow);
+    box-shadow: inset 2px 0 0 var(--accent);
+    color: var(--accent);
+  }
+  .col-temp { color: var(--accent) !important; }
+  .col-time { color: var(--teal) !important; }
+  td.action-cell { width: 36px; padding: 4px 8px; }
+
+  /* --- Buttons --- */
+  .btn-del {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: var(--radius);
+    width: 26px; height: 26px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .btn-del:hover { border-color: var(--danger); color: var(--danger); background: rgba(232,66,66,0.08); }
+  .btn-del svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  .btn-row {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 12px 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  button.btn {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    border-radius: var(--radius);
+    padding: 7px 14px;
+    cursor: pointer;
+    border: 1px solid var(--border-bright);
+    background: var(--surface);
+    color: var(--text);
+    transition: all 0.15s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  button.btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+  button.btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+
+  button.btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  button.btn-primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); color: white; }
+
+  button.btn-danger {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+  button.btn-danger:hover { background: rgba(232,66,66,0.1); }
+
+  /* --- Profile controls --- */
+  .field-group { display: flex; gap: 8px; align-items: center; }
+  input[type="text"], select {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-bright);
+    padding: 7px 10px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.15s;
+  }
+  input[type="text"]:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+  }
+  input[type="text"]::placeholder { color: var(--text-muted); }
+  select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7180' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+  select option { background: var(--surface2); }
+
+  /* --- Main content area --- */
+  .content {
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+
+  .graph-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    flex: 1;
+  }
+  .graph-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .graph-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .legend { display: flex; gap: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .canvas-wrap { padding: 16px; }
+  canvas {
+    display: block;
+    width: 100%;
+    border-radius: var(--radius);
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+
+  /* --- Controls row --- */
+  .controls-bar {
+    display: flex; gap: 10px; align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+  }
+  .controls-bar .divider {
+    width: 1px; height: 24px; background: var(--border); margin: 0 4px;
+  }
+  .status-badge {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 2px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+  .status-badge.running {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-glow);
+    animation: status-blink 1s infinite;
+  }
+  @keyframes status-blink { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+  #output {
+    font-family: var(--mono); font-size: 12px; color: var(--text-muted);
+  }
+
+  /* Grid line style on canvas — handled in JS */
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-icon">
+    <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+  </div>
+  <div>
+    <h1>Reflow Oven Control Center</h1>
+    <p>ESP8266 Interface</p>
+  </div>
+  <div class="header-status">
+    <div class="status-dot"></div>
+    <span>Connected</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <!-- Live Temp -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg viewBox="0 0 24 24"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+        Live Temperature
+      </div>
+      <div class="temp-display">
+        <span class="temp-value" id="currentTemp">—</span>
+        <span class="temp-unit">°C</span>
+      </div>
+      <div class="temp-label">Current reading</div>
+    </div>
+
+    <!-- Profile Table -->
+    <div class="panel" style="flex:1; display:flex; flex-direction:column;">
+      <div class="panel-header">
+        <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Reflow Profile
+      </div>
+      <div class="table-wrap" style="flex:1;">
+        <table id="graphValues">
+          <thead>
+            <tr>
+              <th>Temp (°C)</th>
+              <th>Time (s)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td contenteditable="true" class="col-temp">20</td>
+              <td contenteditable="true" class="col-time">0</td>
+              <td class="action-cell"><button class="btn-del" onclick="deleteRow(this)" title="Delete row"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button></td>
+            </tr>
+          </tbody>
         </table>
+      </div>
+      <div class="btn-row">
+        <button class="btn" onclick="addRow()">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Row
+        </button>
+        <button class="btn btn-primary" onclick="updateGraph()">
+          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Update Graph
+        </button>
+      </div>
+    </div>
 
-        
-
-
-        <button type="addRow" onclick="addRow()" style="margin-right: 20px;">Add Row</button>
-        <button type="updateGraph" onclick="updateGraph()">Update Graph</button>
-        <br><br>
-        <input type="text" id="profileName" name="profileName" placeholder="Enter profile Name">
-        <button type="saveProfile" onclick="saveProfile()" style="margin-right: 20px;">Save Profile</button>
-        <br><br>
-        <select id="loadProfile" onchange="readProfile()" style="margin-right: 40px;">
-            <option value="">Load Profile</option>
+    <!-- Profile Save/Load -->
+    <div class="panel">
+      <div class="panel-header">
+        <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Profiles
+      </div>
+      <div class="panel-body" style="display:flex; flex-direction:column; gap:10px;">
+        <div class="field-group">
+          <input type="text" id="profileName" placeholder="Profile name…">
+          <button class="btn" onclick="saveProfile()" style="white-space:nowrap; flex-shrink:0;">
+            <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+            Save
+          </button>
+        </div>
+        <select id="loadProfile" onchange="readProfile()">
+          <option value="">— Load profile —</option>
         </select>
-        <label for="currentTemp">Current Temperature (&deg;C):</label>
-        <input type="text" id="currentTemp" name="currentTemp" readonly>
-        <br>
+      </div>
+    </div>
 
-        <h2> Temperature (&deg;C) vs Time (s) Plot </h2>
-        <canvas id="tempGraph" width="600" height="400" style="border:1px solid black"></canvas>
-        <br><br>
-        <button type="startReflow" onclick="startReflow()" style="margin-right: 40px;">Start Reflow</button>
-        <button type="stopReflow" onclick="stopReflow()">Stop Reflow</button>
-        <br><br>
-        <p id="output"></p>
+  </aside>
 
-        
+  <!-- Main content -->
+  <main class="content">
 
-        <script>
-            // Get canvas context and set up coordinate system
-            const canvas = document.getElementById('tempGraph');
-            const ctx = canvas.getContext('2d');
-            ctx.transform(1, 0, 0, -1, 0, canvas.height); // Invert y-axis
-            loadProfiles();
+    <!-- Controls -->
+    <div class="controls-bar">
+      <button class="btn btn-primary" onclick="startReflow()" id="btnStart">
+        <svg viewBox="0 0 24 24" style="stroke:white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Start Reflow
+      </button>
+      <button class="btn btn-danger" onclick="stopReflow()" id="btnStop">
+        <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>
+        Stop
+      </button>
+      <div class="divider"></div>
+      <span class="status-badge" id="statusBadge">IDLE</span>
+      <p id="output" style="margin-left:8px;"></p>
+    </div>
 
-            // Graphing global variables
-            let xLargest = 0;
-            let yLargest = 0;
-            let xMax = canvas.width;
-            let yMax = canvas.height;
-            let timeCounter = 0;
-            let start = false;
+    <!-- Graph -->
+    <div class="graph-panel">
+      <div class="graph-header">
+        <span class="graph-title">
+          <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--text-muted);fill:none;stroke-width:2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Temperature vs Time
+        </span>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Profile</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div>Actual</div>
+        </div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="tempGraph" width="900" height="420"></canvas>
+      </div>
+    </div>
 
-            window.onload = function() {
-                setInterval(getTemp, 500);
-            };
+  </main>
+</div>
 
+<script>
+  const canvas = document.getElementById('tempGraph');
+  const ctx = canvas.getContext('2d');
+  ctx.transform(1, 0, 0, -1, 0, canvas.height);
+  loadProfiles();
 
-            // Function to delete a row in the table
-            function deleteRow(btn) {
-                const row = btn.parentNode.parentNode;
-                row.parentNode.removeChild(row);
-            }
+  let xLargest = 0, yLargest = 0;
+  const xMax = canvas.width, yMax = canvas.height;
+  let timeCounter = 0, start = false;
 
-            // Function to add a new row to the table
-            function addRow() {
-                const table = document.getElementById('graphValues').getElementsByTagName('tbody')[0];
-                const row = table.insertRow();
-                for (let i = 0; i < 2; i++) {
-                    let cell = row.insertCell();
-                    cell.contentEditable = "true";
-                    cell.innerText = "";
-                }
-                let actionCell = row.insertCell();
-                actionCell.innerHTML = '<button onclick="deleteRow(this)">Delete</button>';
-            }
+  window.onload = function() { setInterval(getTemp, 500); };
 
-            // Function to get table data as arrays
-            function getTableData() {
-                const rows = document.getElementById('graphValues').getElementsByTagName('tbody')[0].getElementsByTagName('tr')
-                let x = new Array(rows.length);
-                let y = new Array(rows.length);
+  function deleteRow(btn) {
+    const row = btn.parentNode.parentNode;
+    row.parentNode.removeChild(row);
+  }
 
-                for (let i = 0; i < rows.length; i++) {
-                    const cells = rows[i].getElementsByTagName('td');
-                    let x_temp = parseInt(cells[1].innerText, 10);
-                    let y_temp = parseInt(cells[0].innerText, 10);
-                    
-                    if (!isNaN(x_temp) && !isNaN(y_temp)) {
-                        x[i] = x_temp;
-                        y[i] = y_temp;
-                    } else {
-                        x[i] = 0;
-                        y[i] = 0;
-                    }
-                }
-                return [x, y];
-            }
+  function addRow() {
+    const tbody = document.getElementById('graphValues').getElementsByTagName('tbody')[0];
+    const row = tbody.insertRow();
+    const classes = ['col-temp', 'col-time'];
+    for (let i = 0; i < 2; i++) {
+      let cell = row.insertCell();
+      cell.contentEditable = 'true';
+      cell.className = classes[i];
+      cell.innerText = '';
+    }
+    let actionCell = row.insertCell();
+    actionCell.className = 'action-cell';
+    actionCell.innerHTML = `<button class="btn-del" onclick="deleteRow(this)" title="Delete row"><svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>`;
+  }
 
-        
-            // Function to update the graph based on table data
-            function updateGraph() {
+  function getTableData() {
+    const rows = document.getElementById('graphValues').getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+    let x = [], y = [];
+    for (let i = 0; i < rows.length; i++) {
+      const cells = rows[i].getElementsByTagName('td');
+      let xv = parseInt(cells[1].innerText, 10);
+      let yv = parseInt(cells[0].innerText, 10);
+      x.push(isNaN(xv) ? 0 : xv);
+      y.push(isNaN(yv) ? 0 : yv);
+    }
+    return [x, y];
+  }
 
-                ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
+  function drawGrid() {
+    const gridLines = 8;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(42,45,53,1)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= gridLines; i++) {
+      const x = (i / gridLines) * xMax;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, yMax); ctx.stroke();
+      const y = (i / gridLines) * yMax;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(xMax, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
 
+  function updateGraph() {
+    ctx.clearRect(0, 0, xMax, yMax);
+    drawGrid();
 
-                let x, y;
-                [x, y] = getTableData();
+    let [x, y] = getTableData();
+    xLargest = x[0]; yLargest = y[0];
+    for (let i = 0; i < x.length; i++) {
+      if (x[i] > xLargest) xLargest = x[i];
+      if (y[i] > yLargest) yLargest = y[i];
+    }
+    xLargest = (xLargest + 1) * 1.1;
+    yLargest = (yLargest + 1) * 1.1;
 
-                // Find largest x and y values for scaling
-                xLargest = x[0];
-                yLargest = y[0];
+    let xS = x.map(v => (v / xLargest) * xMax);
+    let yS = y.map(v => (v / yLargest) * yMax);
 
-                for (let i = 0; i < x.length; i++) {
-                    if (x[i] > xLargest){
-                        xLargest = x[i];
-                    }
-                    if (y[i] > yLargest){
-                        yLargest = y[i];
-                    }
-                }
+    // Area fill under profile
+    ctx.beginPath();
+    ctx.moveTo(xS[0], 0);
+    for (let i = 0; i < xS.length; i++) ctx.lineTo(xS[i], yS[i]);
+    ctx.lineTo(xS[xS.length - 1], 0);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(232, 97, 42, 0.06)';
+    ctx.fill();
 
-                // Scale largest values to fit in canvas with 10% margin, add one to avoid zero division
-                xLargest = (xLargest+1)*1.1;
-                yLargest = (yLargest+1)*1.1;
+    // Profile line
+    ctx.strokeStyle = '#e8612a';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(xS[0], yS[0]);
+    for (let i = 1; i < xS.length; i++) ctx.lineTo(xS[i], yS[i]);
+    ctx.stroke();
 
+    // Profile dots
+    ctx.fillStyle = '#e8612a';
+    for (let i = 0; i < xS.length; i++) {
+      ctx.beginPath();
+      ctx.arc(xS[i], yS[i], 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#0e0f11';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
 
-                // Scale x and y values to fit in canvas
-                let xScaled = new Array(x.length);
-                let yScaled = new Array(y.length);
-                for (let i = 0; i < x.length; i++) {
-                    xScaled[i] = (x[i]/xLargest)*xMax;
-                    yScaled[i] = (y[i]/yLargest)*yMax;
-                }
+  async function startReflow() {
+    await fetch('/updateProfile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ x: getTableData()[0], y: getTableData()[1] })
+    });
+    await fetch('/stopStart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'START'
+    });
+    start = true;
+    updateGraph();
+    document.getElementById('statusBadge').textContent = 'RUNNING';
+    document.getElementById('statusBadge').classList.add('running');
+  }
 
+  async function stopReflow() {
+    await fetch('/stopStart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'STOP'
+    });
+    start = false;
+    document.getElementById('statusBadge').textContent = 'IDLE';
+    document.getElementById('statusBadge').classList.remove('running');
+  }
 
-                // Draw points and lines
-                ctx.strokeStyle = 'blue';
-                ctx.fillStyle = 'blue';
-                ctx.lineWidth = 2;
+  async function saveProfile() {
+    let profileName = document.getElementById('profileName').value;
+    if (!profileName) {
+      alert('Please enter a profile name before saving.');
+    } else {
+      let response = await fetch('/saveProfile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: profileName, x: getTableData()[0], y: getTableData()[1] })
+      });
+      let txt = await response.text();
+      if (txt !== 'OK') {
+        alert('Error saving profile: ' + txt);
+      } else {
+        alert('Profile ' + profileName + ' saved!');
+        document.getElementById('profileName').value = '';
+      }
+    }
+    loadProfiles();
+  }
 
-                for (let i = 0; i < xScaled.length; i++) {
-                    ctx.beginPath();
-                    ctx.ellipse(xScaled[i], yScaled[i], 3, 3, 0, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.closePath();
-                }
+  async function loadProfiles() {
+    let output = await fetch('/getProfiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'Hi'
+    });
+    let jsonOutput = JSON.parse(await output.text());
+    let select = document.getElementById('loadProfile');
+    while (select.options.length > 0) select.remove(0);
+    let defaultOption = document.createElement('option');
+    defaultOption.text = '— Load profile —';
+    defaultOption.value = '';
+    select.appendChild(defaultOption);
+    for (let i = 0; i < jsonOutput.length; i++) {
+      let option = document.createElement('option');
+      let name = jsonOutput[i].slice(0, -5);
+      option.text = name; option.value = name;
+      select.appendChild(option);
+    }
+  }
 
-                for (let i = 1; i < xScaled.length; i++) {
-                    // Draw lines
-                    ctx.beginPath();
-                    ctx.moveTo(xScaled[i - 1], yScaled[i - 1]);
-                    ctx.lineTo(xScaled[i], yScaled[i]);
-                    ctx.stroke();
-                    ctx.closePath();
-                }
-            }
+  async function readProfile() {
+    let profileName = document.getElementById('loadProfile').value;
+    if (!profileName) { alert('Please select a profile to load.'); return; }
+    let output = await fetch('/readProfile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: profileName
+    });
+    let profileData = JSON.parse(await output.text());
+    const tbody = document.getElementById('graphValues').getElementsByTagName('tbody')[0];
+    while (tbody.rows.length > 0) tbody.deleteRow(0);
+    const classes = ['col-temp', 'col-time'];
+    for (let k = 0; k < profileData['x'].length; k++) {
+      const row = tbody.insertRow();
+      for (let i = 0; i < 2; i++) {
+        let cell = row.insertCell();
+        cell.contentEditable = 'true';
+        cell.className = classes[i];
+        cell.innerText = i === 0 ? profileData['y'][k] : profileData['x'][k];
+      }
+      let actionCell = row.insertCell();
+      actionCell.className = 'action-cell';
+      actionCell.innerHTML = `<button class="btn-del" onclick="deleteRow(this)" title="Delete row"><svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>`;
+    }
+    updateGraph();
+  }
 
-            // Function to start the reflow process
-            async function startReflow() {
-                await fetch("/updateProfile", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        x: getTableData()[0],
-                        y: getTableData()[1]
-                    })
-                })
-                await fetch("/stopStart", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "text/plain"
-                    },
-                    body: "START"
-                })
-                start = true;
-                updateGraph();
-            }
+  async function getTemp() {
+    let temp = await fetch('/temperature', {
+      method: 'POST',
+      headers: { contentType: 'text/plain' },
+      body: 'Hi'
+    });
+    let temperature = await temp.text();
+    document.getElementById('currentTemp').value !== undefined
+      ? document.getElementById('currentTemp').textContent = temperature
+      : null;
+    document.getElementById('currentTemp').textContent = temperature;
 
-            // Function to stop the reflow process
-            async function stopReflow() {
-                await fetch("/stopStart", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "text/plain"
-                    },
-                    body: "STOP"
-                })
-                start = false;
-            }
-
-            // Function to save the profile to a file
-            async function saveProfile() {
-                let profileName = document.getElementById("profileName").value;
-                if (profileName === ""){
-                    alert("Please enter a profile name before saving.");
-                    //return;
-                } else {
-                    let response = await fetch("/saveProfile", {
-                        method: "POST",
-                        headers: {
-                        "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({
-                            name: profileName,
-                            x: getTableData()[0],
-                            y: getTableData()[1]
-                        })  
-                    })
-                    if (await response.text() !== "OK"){
-                        alert("Error saving profile: " + await response.text());
-                        //return;
-                    } else {
-                        alert("Profile " + profileName + " saved! ");
-                        document.getElementById("profileName").value = "";
-                    }  
-                }
-                loadProfiles();
-            }
-            
-            // Function to get list of all reflow profiles
-            async function loadProfiles() {
-                let output = await fetch("/getProfiles", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "text/plain"
-                    },
-                    body: "Hi"
-                })
-                let jsonOutput = JSON.parse(await output.text());
-
-                // Populate list with profiles
-                let select = document.getElementById('loadProfile');
-                while (select.options.length > 0) {
-                    select.remove(0);
-                }
-                let defaultOption = document.createElement("option");
-                defaultOption.text = "Load Profile";
-                defaultOption.value = "";
-                select.appendChild(defaultOption);
-
-                for(let i =0; i < jsonOutput.length; i++) {
-                    let option = document.createElement("option");
-                    let newProfile = jsonOutput[i].slice(0, -5);
-                    option.text = newProfile;
-                    option.value = newProfile;
-                    select.appendChild(option);
-                }
-            }
-
-            // Pulls a saved reflow profile from memory
-            async function readProfile() {
-                let profileName = document.getElementById("loadProfile").value;
-                if (profileName === ""){
-                    alert("Please select a profile to load.");
-                    return;
-                } else {
-                    let output = await fetch("/readProfile", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "text/plain"
-                        },
-                        body: profileName
-                    })
-                    let profileData = JSON.parse(await output.text());
-                    
-                    // Write data to table
-                    const table = document.getElementById('graphValues').getElementsByTagName('tbody')[0];
-                    while (table.rows.length > 0) {
-                        table.deleteRow(0);
-                    }
-                    for (k = 0; k < profileData["x"].length; k++) {
-                        const row = table.insertRow();
-                        for (let i = 0; i < 2; i++) {
-                            let cell = row.insertCell();
-                            cell.contentEditable = "true";
-                            if (i === 0) {cell.innerText = profileData["y"][k];}
-                            else if (i === 1) {cell.innerText = profileData["x"][k];}
-                        }
-                        let actionCell = row.insertCell();
-                        actionCell.innerHTML = '<button onclick="deleteRow(this)">Delete</button>';
-                    }
-                    
-                }
-                updateGraph();
-            }
-
-
-            // Function to get temperature from esp8266
-            async function getTemp() {
-                let temp = await fetch("/temperature", {
-                    method: "POST",
-                    headers: {
-                        contentType: "text/plain"
-                    },
-                    body: "Hi"
-                })
-                let temperature = await temp.text();
-                
-                document.getElementById("currentTemp").value = temperature;
-                if (start) {
-                    ctx.beginPath();
-
-                    ctx.fillStyle = 'red';
-                    ctx.ellipse(((timeCounter/xLargest)*xMax), ((temperature/yLargest)*yMax), 3, 3, 0, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.closePath();
-
-
-                    if (timeCounter >= ((xLargest/1.1) - 1)) { stopReflow(); }
-
-                    timeCounter += 0.5;
-                } else {
-                    timeCounter = 0;
-                }
-            }
-
-            
-            
-        </script>
-
-    </body>
+    if (start) {
+      ctx.beginPath();
+      ctx.fillStyle = '#1fc8a0';
+      ctx.strokeStyle = '#0e0f11';
+      ctx.lineWidth = 1.5;
+      ctx.arc((timeCounter / xLargest) * xMax, (temperature / yLargest) * yMax, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.closePath();
+      if (timeCounter >= ((xLargest / 1.1) - 1)) stopReflow();
+      timeCounter += 0.5;
+    } else {
+      timeCounter = 0;
+    }
+  }
+</script>
+</body>
 </html>
