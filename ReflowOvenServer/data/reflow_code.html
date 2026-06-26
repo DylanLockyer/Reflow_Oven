@@ -68,8 +68,13 @@
     display: flex; align-items: center; gap: 8px;
     font-family: var(--mono); font-size: 12px; color: var(--text-muted);
   }
+  /* Status dot: grey/off by default, green+animated when data is live */
   .status-dot {
     width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-muted);
+    transition: background 0.4s, box-shadow 0.4s;
+  }
+  .status-dot.live {
     background: var(--teal);
     box-shadow: 0 0 6px var(--teal);
     animation: pulse 2s infinite;
@@ -92,6 +97,7 @@
     display: flex;
     flex-direction: column;
     gap: 24px;
+    overflow-y: auto;
   }
 
   .panel {
@@ -125,6 +131,7 @@
     line-height: 1;
     letter-spacing: -2px;
   }
+  .temp-value.null-temp { color: var(--text-muted); }
   .temp-unit { font-family: var(--mono); font-size: 20px; color: var(--accent-dim); }
   .temp-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; padding: 0 14px 12px; }
 
@@ -154,10 +161,7 @@
     padding: 6px 12px;
     color: var(--text-bright);
   }
-  tbody td[contenteditable="true"] {
-    outline: none;
-    cursor: text;
-  }
+  tbody td[contenteditable="true"] { outline: none; cursor: text; }
   tbody td[contenteditable="true"]:focus {
     background: var(--accent-glow);
     box-shadow: inset 2px 0 0 var(--accent);
@@ -219,7 +223,7 @@
 
   /* --- Profile controls --- */
   .field-group { display: flex; gap: 8px; align-items: center; }
-  input[type="text"], select {
+  input[type="text"], input[type="number"], select {
     font-family: var(--mono);
     font-size: 12px;
     background: var(--bg);
@@ -231,13 +235,52 @@
     width: 100%;
     transition: border-color 0.15s;
   }
-  input[type="text"]:focus, select:focus {
+  input[type="text"]:focus, input[type="number"]:focus, select:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent-glow);
   }
-  input[type="text"]::placeholder { color: var(--text-muted); }
-  select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7180' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+  input[type="text"]::placeholder,
+  input[type="number"]::placeholder { color: var(--text-muted); }
+  input[readonly] {
+    color: var(--text-muted);
+    cursor: default;
+  }
+  select {
+    cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7180' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px;
+  }
   select option { background: var(--surface2); }
+
+  /* --- PID grid --- */
+  .pid-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .pid-field label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+
+  /* --- PID visibility checkbox --- */
+  .pid-toggle-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 4px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .pid-toggle-row input[type="checkbox"] {
+    width: 14px; height: 14px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
 
   /* --- Main content area --- */
   .content {
@@ -310,8 +353,6 @@
   #output {
     font-family: var(--mono); font-size: 12px; color: var(--text-muted);
   }
-
-  /* Grid line style on canvas — handled in JS */
 </style>
 </head>
 <body>
@@ -325,8 +366,8 @@
     <p>ESP8266 Interface</p>
   </div>
   <div class="header-status">
-    <div class="status-dot"></div>
-    <span>Connected</span>
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusDotLabel">No data</span>
   </div>
 </header>
 
@@ -342,10 +383,10 @@
         Live Temperature
       </div>
       <div class="temp-display">
-        <span class="temp-value" id="currentTemp">—</span>
+        <span class="temp-value null-temp" id="currentTemp">null</span>
         <span class="temp-unit">°C</span>
       </div>
-      <div class="temp-label">Current reading</div>
+      <div class="temp-label">Current reading (averaged)</div>
     </div>
 
     <!-- Profile Table -->
@@ -384,7 +425,7 @@
       </div>
     </div>
 
-    <!-- Profile Save/Load -->
+    <!-- Profile Save/Load/Delete -->
     <div class="panel">
       <div class="panel-header">
         <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -398,9 +439,77 @@
             Save
           </button>
         </div>
-        <select id="loadProfile" onchange="readProfile()">
-          <option value="">— Load profile —</option>
-        </select>
+        <div class="field-group">
+          <select id="loadProfile" onchange="readProfile()" style="flex:1;">
+            <option value="">— Load profile —</option>
+          </select>
+          <button class="btn btn-danger" onclick="deleteProfile()" title="Delete selected profile" style="flex-shrink:0; padding:7px 10px;">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PID visibility toggle -->
+    <label class="pid-toggle-row">
+      <input type="checkbox" id="showPidPanel" onchange="togglePidPanel()">
+      Show PID Tuning
+    </label>
+
+    <!-- PID Tuning (hidden until checkbox is ticked) -->
+    <div class="panel" id="pidPanel" style="display:none;">
+      <div class="panel-header">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        PID Tuning
+      </div>
+      <div class="panel-body" style="display:flex; flex-direction:column; gap:12px;">
+        <div class="pid-grid">
+          <div class="pid-field">
+            <label>Kp</label>
+            <input type="number" id="pidKp" value="1" step="0.01" min="0" placeholder="1.0">
+          </div>
+          <div class="pid-field">
+            <label>Ki</label>
+            <input type="number" id="pidKi" value="0.05" step="0.001" min="0" placeholder="0.05">
+          </div>
+          <div class="pid-field">
+            <label>Kd</label>
+            <input type="number" id="pidKd" value="1" step="0.01" min="0" placeholder="1.0">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="sendPID()" style="width:100%; justify-content:center;">
+          <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Send to Device
+        </button>
+        <p id="pidStatus" style="font-family:var(--mono); font-size:11px; color:var(--text-muted); min-height:14px;"></p>
+
+        <!-- Live PID terms (read-only, polled from device) -->
+        <div class="pid-grid">
+          <div class="pid-field">
+            <label>P Term</label>
+            <input type="text" id="pidPValue" readonly value="0">
+          </div>
+          <div class="pid-field">
+            <label>I Term</label>
+            <input type="text" id="pidIValue" readonly value="0">
+          </div>
+          <div class="pid-field">
+            <label>D Term</label>
+            <input type="text" id="pidDValue" readonly value="0">
+          </div>
+          <div class="pid-field">
+            <label>Setpoint</label>
+            <input type="text" id="pidSetpoint" readonly value="0">
+          </div>
+          <div class="pid-field">
+            <label>Error</label>
+            <input type="text" id="pidError" readonly value="0">
+          </div>
+          <div class="pid-field">
+            <label>Power</label>
+            <input type="text" id="pidPower" readonly value="0">
+          </div>
+        </div>
       </div>
     </div>
 
@@ -454,7 +563,46 @@
   const xMax = canvas.width, yMax = canvas.height;
   let timeCounter = 0, start = false;
 
-  window.onload = function() { setInterval(getTemp, 500); };
+  // ── Status dot / connection tracking ────────────────────────────────────────
+  let dataTimeoutHandle = null;
+  const DATA_TIMEOUT_MS = 2000; // consider signal lost after 2 s without a good reading
+
+  function markDataReceived() {
+    const dot   = document.getElementById('statusDot');
+    const label = document.getElementById('statusDotLabel');
+    dot.classList.add('live');
+    label.textContent = 'Connected';
+    clearTimeout(dataTimeoutHandle);
+    dataTimeoutHandle = setTimeout(() => {
+      dot.classList.remove('live');
+      label.textContent = 'No data';
+    }, DATA_TIMEOUT_MS);
+  }
+
+  // ── Temperature display ──────────────────────────────────────────────────────
+  function setTempDisplay(value) {
+    const el = document.getElementById('currentTemp');
+    if (value === null) {
+      el.textContent = 'null';
+      el.classList.add('null-temp');
+    } else {
+      el.textContent = parseFloat(value).toFixed(1);
+      el.classList.remove('null-temp');
+    }
+  }
+
+  // ── PID panel visibility ─────────────────────────────────────────────────────
+  function togglePidPanel() {
+    const checked = document.getElementById('showPidPanel').checked;
+    document.getElementById('pidPanel').style.display = checked ? 'block' : 'none';
+  }
+
+  // ── Table helpers ────────────────────────────────────────────────────────────
+  window.onload = function() {
+    pollPID();   // populate PID fields from device/flash immediately on page load
+    setInterval(getTemp, 500);
+    setInterval(pollPID, 500);
+  };
 
   function deleteRow(btn) {
     const row = btn.parentNode.parentNode;
@@ -473,7 +621,11 @@
     }
     let actionCell = row.insertCell();
     actionCell.className = 'action-cell';
-    actionCell.innerHTML = `<button class="btn-del" onclick="deleteRow(this)" title="Delete row"><svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>`;
+    actionCell.innerHTML = delBtnHTML();
+  }
+
+  function delBtnHTML() {
+    return `<button class="btn-del" onclick="deleteRow(this)" title="Delete row"><svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>`;
   }
 
   function getTableData() {
@@ -489,6 +641,7 @@
     return [x, y];
   }
 
+  // ── Graph ────────────────────────────────────────────────────────────────────
   function drawGrid() {
     const gridLines = 8;
     ctx.save();
@@ -519,7 +672,7 @@
     let xS = x.map(v => (v / xLargest) * xMax);
     let yS = y.map(v => (v / yLargest) * yMax);
 
-    // Area fill under profile
+    // Area fill
     ctx.beginPath();
     ctx.moveTo(xS[0], 0);
     for (let i = 0; i < xS.length; i++) ctx.lineTo(xS[i], yS[i]);
@@ -549,21 +702,24 @@
     }
   }
 
+  // ── Reflow control ───────────────────────────────────────────────────────────
+  // Note: the microcontroller is the sole authority on when a reflow cycle
+  // stops (manual abort or automatic end-of-profile completion). The GUI
+  // only sends requests and reflects whatever state pollPID() reports back.
   async function startReflow() {
+    const [xs, ys] = getTableData();
     await fetch('/updateProfile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ x: getTableData()[0], y: getTableData()[1] })
+      body: JSON.stringify({ x: xs, y: ys })
     });
     await fetch('/stopStart', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: 'START'
     });
-    start = true;
+    timeCounter = 0;
     updateGraph();
-    document.getElementById('statusBadge').textContent = 'RUNNING';
-    document.getElementById('statusBadge').classList.add('running');
   }
 
   async function stopReflow() {
@@ -572,67 +728,134 @@
       headers: { 'Content-Type': 'text/plain' },
       body: 'STOP'
     });
-    start = false;
-    document.getElementById('statusBadge').textContent = 'IDLE';
-    document.getElementById('statusBadge').classList.remove('running');
   }
 
-  async function saveProfile() {
-    let profileName = document.getElementById('profileName').value;
-    if (!profileName) {
-      alert('Please enter a profile name before saving.');
+  // Reflects the device's reported running state in the badge and graphing flag.
+  function setRunningState(isRunning) {
+    if (isRunning === start) return;  // no change
+    start = isRunning;
+    const badge = document.getElementById('statusBadge');
+    if (isRunning) {
+      badge.textContent = 'RUNNING';
+      badge.classList.add('running');
     } else {
-      let response = await fetch('/saveProfile', {
+      badge.textContent = 'IDLE';
+      badge.classList.remove('running');
+    }
+  }
+
+  // ── PID gains (write) ─────────────────────────────────────────────────────────
+  async function sendPID() {
+    const kp = parseFloat(document.getElementById('pidKp').value);
+    const ki = parseFloat(document.getElementById('pidKi').value);
+    const kd = parseFloat(document.getElementById('pidKd').value);
+    const statusEl = document.getElementById('pidStatus');
+
+    if ([kp, ki, kd].some(isNaN)) {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = 'Invalid values — enter numbers only.';
+      return;
+    }
+
+    try {
+      const res = await fetch('/updatePID', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: profileName, x: getTableData()[0], y: getTableData()[1] })
+        body: JSON.stringify({ kp, ki, kd })
       });
-      let txt = await response.text();
-      if (txt !== 'OK') {
-        alert('Error saving profile: ' + txt);
-      } else {
-        alert('Profile ' + profileName + ' saved!');
-        document.getElementById('profileName').value = '';
-      }
+      const txt = await res.text();
+      statusEl.style.color = txt === 'OK' ? 'var(--teal)' : 'var(--danger)';
+      statusEl.textContent = txt === 'OK' ? 'PID values updated and saved.' : 'Error: ' + txt;
+    } catch {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = 'Device unreachable.';
     }
-    loadProfiles();
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  }
+
+  // ── PID live values (read, polled) ───────────────────────────────────────────
+  async function pollPID() {
+    try {
+      const res = await fetch('/getPID');
+      const pid = await res.json();
+
+      // Don't clobber the gain fields while the user is actively editing them
+      const active = document.activeElement ? document.activeElement.id : '';
+      if (active !== 'pidKp') document.getElementById('pidKp').value = pid.kp;
+      if (active !== 'pidKi') document.getElementById('pidKi').value = pid.ki;
+      if (active !== 'pidKd') document.getElementById('pidKd').value = pid.kd;
+
+      document.getElementById('pidPValue').value   = Number(pid.pValue).toFixed(2);
+      document.getElementById('pidIValue').value   = Number(pid.iValue).toFixed(2);
+      document.getElementById('pidDValue').value   = Number(pid.dValue).toFixed(2);
+      document.getElementById('pidSetpoint').value = Number(pid.setpoint).toFixed(2);
+      document.getElementById('pidError').value    = Number(pid.error).toFixed(2);
+      document.getElementById('pidPower').value    = Number(pid.power).toFixed(0);
+
+      // Microcontroller is authoritative on running state — reflect it here.
+      setRunningState(Number(pid.running) === 1);
+    } catch { /* device not reachable yet */ }
+  }
+
+  // ── Profile management ───────────────────────────────────────────────────────
+  async function saveProfile() {
+    const profileName = document.getElementById('profileName').value.trim();
+    if (!profileName) {
+      alert('Please enter a profile name before saving.');
+      return;
+    }
+    const [xs, ys] = getTableData();
+    const res = await fetch('/saveProfile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: profileName, x: xs, y: ys })
+    });
+    const txt = await res.text();
+    if (txt !== 'OK') {
+      alert('Error saving profile: ' + txt);
+    } else {
+      alert('Profile "' + profileName + '" saved!');
+      document.getElementById('profileName').value = '';
+    }
+    await loadProfiles();
   }
 
   async function loadProfiles() {
-    let output = await fetch('/getProfiles', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: 'Hi'
-    });
-    let jsonOutput = JSON.parse(await output.text());
-    let select = document.getElementById('loadProfile');
-    while (select.options.length > 0) select.remove(0);
-    let defaultOption = document.createElement('option');
-    defaultOption.text = '— Load profile —';
-    defaultOption.value = '';
-    select.appendChild(defaultOption);
-    for (let i = 0; i < jsonOutput.length; i++) {
-      let option = document.createElement('option');
-      let name = jsonOutput[i].slice(0, -5);
-      option.text = name; option.value = name;
-      select.appendChild(option);
-    }
+    try {
+      const res = await fetch('/getProfiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: 'Hi'
+      });
+      const jsonOutput = JSON.parse(await res.text());
+      const select = document.getElementById('loadProfile');
+      while (select.options.length > 0) select.remove(0);
+      const def = document.createElement('option');
+      def.text = '— Load profile —'; def.value = '';
+      select.appendChild(def);
+      for (let i = 0; i < jsonOutput.length; i++) {
+        const opt = document.createElement('option');
+        const name = jsonOutput[i].slice(0, -5); // strip .json
+        opt.text = name; opt.value = name;
+        select.appendChild(opt);
+      }
+    } catch { /* device not reachable yet */ }
   }
 
   async function readProfile() {
-    let profileName = document.getElementById('loadProfile').value;
-    if (!profileName) { alert('Please select a profile to load.'); return; }
-    let output = await fetch('/readProfile', {
+    const profileName = document.getElementById('loadProfile').value;
+    if (!profileName) return;
+    const res = await fetch('/readProfile', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: profileName
     });
-    let profileData = JSON.parse(await output.text());
+    const profileData = JSON.parse(await res.text());
     const tbody = document.getElementById('graphValues').getElementsByTagName('tbody')[0];
     while (tbody.rows.length > 0) tbody.deleteRow(0);
-    const classes = ['col-temp', 'col-time'];
     for (let k = 0; k < profileData['x'].length; k++) {
       const row = tbody.insertRow();
+      const classes = ['col-temp', 'col-time'];
       for (let i = 0; i < 2; i++) {
         let cell = row.insertCell();
         cell.contentEditable = 'true';
@@ -641,35 +864,61 @@
       }
       let actionCell = row.insertCell();
       actionCell.className = 'action-cell';
-      actionCell.innerHTML = `<button class="btn-del" onclick="deleteRow(this)" title="Delete row"><svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>`;
+      actionCell.innerHTML = delBtnHTML();
     }
     updateGraph();
   }
 
-  async function getTemp() {
-    let temp = await fetch('/temperature', {
+  async function deleteProfile() {
+    const profileName = document.getElementById('loadProfile').value;
+    if (!profileName) {
+      alert('Please select a profile to delete.');
+      return;
+    }
+    if (!confirm('Delete profile "' + profileName + '"? This cannot be undone.')) return;
+    const res = await fetch('/removeProfile', {
       method: 'POST',
-      headers: { contentType: 'text/plain' },
-      body: 'Hi'
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: profileName })
     });
-    let temperature = await temp.text();
-    document.getElementById('currentTemp').value !== undefined
-      ? document.getElementById('currentTemp').textContent = temperature
-      : null;
-    document.getElementById('currentTemp').textContent = temperature;
+    const txt = await res.text();
+    if (txt !== 'OK') {
+      alert('Error deleting profile: ' + txt);
+    }
+    await loadProfiles();
+  }
 
-    if (start) {
+  // ── Temperature polling ──────────────────────────────────────────────────────
+  async function getTemp() {
+    let temperature = null;
+    try {
+      const res = await fetch('/temperature');
+      const raw = await res.text();
+      const parsed = parseFloat(raw);
+      // Treat NaN, out-of-range, or MAX31855 fault sentinel (e.g. 0.00 on cold start) gracefully
+      if (!isNaN(parsed) && parsed > -100 && parsed < 1300) {
+        temperature = parsed;
+        markDataReceived();
+      }
+    } catch { /* network error — leave temperature as null */ }
+
+    setTempDisplay(temperature);
+
+    if (start && temperature !== null) {
       ctx.beginPath();
       ctx.fillStyle = '#1fc8a0';
       ctx.strokeStyle = '#0e0f11';
       ctx.lineWidth = 1.5;
-      ctx.arc((timeCounter / xLargest) * xMax, (temperature / yLargest) * yMax, 3.5, 0, Math.PI * 2);
+      ctx.arc(
+        (timeCounter / xLargest) * xMax,
+        (temperature / yLargest) * yMax,
+        3.5, 0, Math.PI * 2
+      );
       ctx.fill();
       ctx.stroke();
       ctx.closePath();
-      if (timeCounter >= ((xLargest / 1.1) - 1)) stopReflow();
       timeCounter += 0.5;
-    } else {
+    } else if (!start) {
       timeCounter = 0;
     }
   }
