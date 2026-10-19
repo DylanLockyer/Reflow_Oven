@@ -212,7 +212,7 @@ double targetTempRate() {
     // timeDiff is in seconds in the profile; pidFrequency is in ms
     return tempDiff / (timeDiff * 1000.0);  // °C per ms
 
-  } else return 0;
+  } else return 0.0;
 
 
 }
